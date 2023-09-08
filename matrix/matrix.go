@@ -626,7 +626,7 @@ func (c *Container) HandleEncryptedUnsupported(source mautrix.EventSource, mxEve
 }
 
 func (c *Container) HandleEncrypted(source mautrix.EventSource, mxEvent *event.Event) {
-	evt, err := c.crypto.DecryptMegolmEvent(context.Background(), mxEvent)
+	evt, err := c.crypto.DecryptMegolmEvent(context.TODO(), mxEvent)
 	if err != nil {
 		debug.Printf("Failed to decrypt event %s: %v", mxEvent.ID, err)
 		mxEvent.Type = muksevt.EventBadEncrypted
@@ -981,17 +981,17 @@ func (c *Container) SendEvent(evt *muksevt.Event) (id.EventID, error) {
 	c.typing = 0
 	room := c.GetRoom(evt.RoomID)
 	if room != nil && room.Encrypted && c.crypto != nil && evt.Type != event.EventReaction {
-		encrypted, err := c.crypto.EncryptMegolmEvent(context.Background(), evt.RoomID, evt.Type, &evt.Content)
+		encrypted, err := c.crypto.EncryptMegolmEvent(context.TODO(), evt.RoomID, evt.Type, &evt.Content)
 		if err != nil {
 			if isBadEncryptError(err) {
 				return "", err
 			}
 			debug.Print("Got", err, "while trying to encrypt message, sharing group session and trying again...")
-			err = c.crypto.ShareGroupSession(context.Background(), room.ID, room.GetMemberList())
+			err = c.crypto.ShareGroupSession(context.TODO(), room.ID, room.GetMemberList())
 			if err != nil {
 				return "", err
 			}
-			encrypted, err = c.crypto.EncryptMegolmEvent(context.Background(), evt.RoomID, evt.Type, &evt.Content)
+			encrypted, err = c.crypto.EncryptMegolmEvent(context.TODO(), evt.RoomID, evt.Type, &evt.Content)
 			if err != nil {
 				return "", err
 			}
@@ -1164,7 +1164,7 @@ func (c *Container) GetHistory(room *rooms.Room, limit int, dbPointer uint64) ([
 				origContent, _ := evt.Content.Parsed.(*event.EncryptedEventContent)
 				evt.Content.Parsed = muksevt.EncryptionUnsupportedContent{Original: origContent}
 			} else {
-				decrypted, err := c.crypto.DecryptMegolmEvent(context.Background(), evt)
+				decrypted, err := c.crypto.DecryptMegolmEvent(context.TODO(), evt)
 				if err != nil {
 					debug.Printf("Failed to decrypt event %s: %v", evt.ID, err)
 					evt.Type = muksevt.EventBadEncrypted

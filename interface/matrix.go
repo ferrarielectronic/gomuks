@@ -17,6 +17,8 @@
 package ifc
 
 import (
+	"context"
+
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/event"
@@ -84,9 +86,9 @@ type Crypto interface {
 	FlushStore() error
 	ProcessSyncResponse(resp *mautrix.RespSync, since string) bool
 	ProcessInRoomVerification(evt *event.Event) error
-	HandleMemberEvent(*event.Event)
-	DecryptMegolmEvent(*event.Event) (*event.Event, error)
-	EncryptMegolmEvent(id.RoomID, event.Type, interface{}) (*event.EncryptedEventContent, error)
-	ShareGroupSession(id.RoomID, []id.UserID) error
+	HandleMemberEvent(mautrix.EventSource, *event.Event)
+	DecryptMegolmEvent(context.Context, *event.Event) (*event.Event, error)
+	EncryptMegolmEvent(context.Context, id.RoomID, event.Type, interface{}) (*event.EncryptedEventContent, error)
+	ShareGroupSession(context.Context, id.RoomID, []id.UserID) error
 	Fingerprint() string
 }

@@ -19,6 +19,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -98,13 +99,13 @@ func autocompleteDevice(cmd *CommandAutocomplete) ([]string, string) {
 	return autocompleteDeviceDeviceID(cmd)
 }
 
-func getDevice(cmd *Command) *crypto.DeviceIdentity {
+func getDevice(cmd *Command) *id.Device {
 	if len(cmd.Args) < 2 {
 		cmd.Reply("Usage: /%s <user id> <device id> [fingerprint]", cmd.Command)
 		return nil
 	}
 	mach := cmd.Matrix.Crypto().(*crypto.OlmMachine)
-	device, err := mach.GetOrFetchDevice(id.UserID(cmd.Args[0]), id.DeviceID(cmd.Args[1]))
+	device, err := mach.GetOrFetchDevice(context.Background(), id.UserID(cmd.Args[0]), id.DeviceID(cmd.Args[1]))
 	if err != nil {
 		cmd.Reply("Failed to get device: %v", err)
 		return nil
@@ -112,7 +113,7 @@ func getDevice(cmd *Command) *crypto.DeviceIdentity {
 	return device
 }
 
-func putDevice(cmd *Command, device *crypto.DeviceIdentity, action string) {
+func putDevice(cmd *Command, device *id.Device, action string) {
 	mach := cmd.Matrix.Crypto().(*crypto.OlmMachine)
 	err := mach.CryptoStore.PutDevice(device.UserID, device)
 	if err != nil {
@@ -145,7 +146,7 @@ func cmdDevices(cmd *Command) {
 	var buf strings.Builder
 	for _, device := range devices {
 		trust := device.Trust.String()
-		if device.Trust == crypto.TrustStateUnset && mach.IsDeviceTrusted(device) {
+		if device.Trust == id.TrustStateUnset && mach.IsDeviceTrusted(device) {
 			trust = "verified (transitive)"
 		}
 		_, _ = fmt.Fprintf(&buf, "%s (%s) - %s\n    Fingerprint: %s\n", device.DeviceID, device.Name, trust, device.Fingerprint())
@@ -165,7 +166,7 @@ func cmdDevice(cmd *Command) {
 	}
 	mach := cmd.Matrix.Crypto().(*crypto.OlmMachine)
 	trustState := device.Trust.String()
-	if device.Trust == crypto.TrustStateUnset && mach.IsDeviceTrusted(device) {
+	if device.Trust == id.TrustStateUnset && mach.IsDeviceTrusted(device) {
 		trustState = "verified (transitive)"
 	}
 	cmd.Reply("%s %s of %s\nFingerprint: %s\nIdentity key: %s\nDevice name: %s\nTrust state: %s",
@@ -174,7 +175,7 @@ func cmdDevice(cmd *Command) {
 		device.Name, trustState)
 }
 
-func crossSignDevice(cmd *Command, device *crypto.DeviceIdentity) {
+func crossSignDevice(cmd *Command, device *id.Device) {
 	mach := cmd.Matrix.Crypto().(*crypto.OlmMachine)
 	err := mach.SignOwnDevice(device)
 	if err != nil {
@@ -189,7 +190,7 @@ func cmdVerifyDevice(cmd *Command) {
 	if device == nil {
 		return
 	}
-	if device.Trust == crypto.TrustStateVerified {
+	if device.Trust == id.TrustStateVerified {
 		cmd.Reply("That device is already verified")
 		return
 	}
@@ -210,12 +211,12 @@ func cmdVerifyDevice(cmd *Command) {
 			return
 		}
 		action := "verified"
-		if device.Trust == crypto.TrustStateBlacklisted {
+		if device.Trust == id.TrustStateBlacklisted {
 			action = "unblacklisted and verified"
 		}
 		if device.UserID == cmd.Matrix.Client().UserID {
 			crossSignDevice(cmd, device)
-			device.Trust = crypto.TrustStateVerified
+			device.Trust = id.TrustStateVerified
 			putDevice(cmd, device, action)
 		} else {
 			putDevice(cmd, device, action)
@@ -247,7 +248,7 @@ func cmdVerify(cmd *Command) {
 			"or use `--force` to start the verification anyway")
 		return
 	}
-	modal := NewVerificationModal(cmd.MainView, &crypto.DeviceIdentity{UserID: userID}, mach.DefaultSASTimeout)
+	modal := NewVerificationModal(cmd.MainView, &id.Device{UserID: userID}, mach.DefaultSASTimeout)
 	_, err := mach.NewInRoomSASVerificationWith(cmd.Room.Room.ID, userID, modal, 120*time.Second)
 	if err != nil {
 		cmd.Reply("Failed to start in-room verification: %v", err)
@@ -261,15 +262,15 @@ func cmdUnverify(cmd *Command) {
 	if device == nil {
 		return
 	}
-	if device.Trust == crypto.TrustStateUnset {
+	if device.Trust == id.TrustStateUnset {
 		cmd.Reply("That device is already not verified")
 		return
 	}
 	action := "unverified"
-	if device.Trust == crypto.TrustStateBlacklisted {
+	if device.Trust == id.TrustStateBlacklisted {
 		action = "unblacklisted"
 	}
-	device.Trust = crypto.TrustStateUnset
+	device.Trust = id.TrustStateUnset
 	putDevice(cmd, device, action)
 }
 
@@ -278,15 +279,15 @@ func cmdBlacklist(cmd *Command) {
 	if device == nil {
 		return
 	}
-	if device.Trust == crypto.TrustStateBlacklisted {
+	if device.Trust == id.TrustStateBlacklisted {
 		cmd.Reply("That device is already blacklisted")
 		return
 	}
 	action := "blacklisted"
-	if device.Trust == crypto.TrustStateVerified {
+	if device.Trust == id.TrustStateVerified {
 		action = "unverified and blacklisted"
 	}
-	device.Trust = crypto.TrustStateBlacklisted
+	device.Trust = id.TrustStateBlacklisted
 	putDevice(cmd, device, action)
 }
 

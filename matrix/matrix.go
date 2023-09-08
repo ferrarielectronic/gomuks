@@ -34,6 +34,7 @@ import (
 	dbg "runtime/debug"
 	"time"
 
+	"github.com/rs/zerolog"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/event"
@@ -128,7 +129,12 @@ func (c *Container) InitClient(isStartup bool) error {
 		return fmt.Errorf("failed to create mautrix client: %w", err)
 	}
 	c.client.UserAgent = fmt.Sprintf("gomuks/%s %s", c.gmx.Version(), mautrix.DefaultUserAgent)
-	c.client.Logger = mxLogger{}
+	log := zerolog.New(zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
+		w.Out = os.Stdout
+		w.TimeFormat = time.Stamp
+	})).With().Timestamp().Logger()
+	log = log.Level(zerolog.InfoLevel)
+	c.client.Log = log
 	c.client.DeviceID = c.config.DeviceID
 
 	err = c.initCrypto()
@@ -396,7 +402,7 @@ func (c *Container) OnLogin() {
 			// Don't spam the crypto module with member events of an initial sync
 			// TODO invalidate all group sessions when clearing cache?
 			if c.config.AuthCache.InitialSyncDone {
-				c.crypto.HandleMemberEvent(evt)
+				c.crypto.HandleMemberEvent(source, evt)
 			}
 		})
 		c.syncer.OnEventType(event.EventEncrypted, c.HandleEncrypted)
@@ -620,7 +626,7 @@ func (c *Container) HandleEncryptedUnsupported(source mautrix.EventSource, mxEve
 }
 
 func (c *Container) HandleEncrypted(source mautrix.EventSource, mxEvent *event.Event) {
-	evt, err := c.crypto.DecryptMegolmEvent(mxEvent)
+	evt, err := c.crypto.DecryptMegolmEvent(context.Background(), mxEvent)
 	if err != nil {
 		debug.Printf("Failed to decrypt event %s: %v", mxEvent.ID, err)
 		mxEvent.Type = muksevt.EventBadEncrypted
@@ -764,17 +770,21 @@ func (c *Container) processOwnMembershipChange(evt *event.Event) {
 }
 
 func (c *Container) parseReadReceipt(evt *event.Event) (largestTimestampEvent id.EventID) {
-	var largestTimestamp int64
+	var largestTimestamp time.Time
 
 	for eventID, receipts := range *evt.Content.AsReceipt() {
-		myInfo, ok := receipts.Read[c.config.UserID]
-		if !ok {
-			continue
-		}
+		receiptTypes := [2]event.ReceiptType{event.ReceiptTypeRead, event.ReceiptTypeReadPrivate}
+		for _, receiptType := range receiptTypes {
+			userReceipts := receipts.GetOrCreate(receiptType)
+			myInfo, ok := userReceipts[c.config.UserID]
+			if !ok {
+				continue
+			}
 
-		if myInfo.Timestamp > largestTimestamp {
-			largestTimestamp = myInfo.Timestamp
-			largestTimestampEvent = eventID
+			if myInfo.Timestamp.After(largestTimestamp) {
+				largestTimestamp = myInfo.Timestamp
+				largestTimestampEvent = eventID
+			}
 		}
 	}
 	return
@@ -935,7 +945,7 @@ func (c *Container) prepareEvent(roomID id.RoomID, content *event.MessageEventCo
 			Type:    event.RelReplace,
 			EventID: rel.Event.ID,
 		}
-	} else if rel != nil && rel.Type == event.RelReply {
+	} else if rel != nil && rel.Type == event.RelThread {
 		content.SetReply(rel.Event.Event)
 	}
 
@@ -971,17 +981,17 @@ func (c *Container) SendEvent(evt *muksevt.Event) (id.EventID, error) {
 	c.typing = 0
 	room := c.GetRoom(evt.RoomID)
 	if room != nil && room.Encrypted && c.crypto != nil && evt.Type != event.EventReaction {
-		encrypted, err := c.crypto.EncryptMegolmEvent(evt.RoomID, evt.Type, &evt.Content)
+		encrypted, err := c.crypto.EncryptMegolmEvent(context.Background(), evt.RoomID, evt.Type, &evt.Content)
 		if err != nil {
 			if isBadEncryptError(err) {
 				return "", err
 			}
 			debug.Print("Got", err, "while trying to encrypt message, sharing group session and trying again...")
-			err = c.crypto.ShareGroupSession(room.ID, room.GetMemberList())
+			err = c.crypto.ShareGroupSession(context.Background(), room.ID, room.GetMemberList())
 			if err != nil {
 				return "", err
 			}
-			encrypted, err = c.crypto.EncryptMegolmEvent(evt.RoomID, evt.Type, &evt.Content)
+			encrypted, err = c.crypto.EncryptMegolmEvent(context.Background(), evt.RoomID, evt.Type, &evt.Content)
 			if err != nil {
 				return "", err
 			}
@@ -1052,7 +1062,7 @@ func (c *Container) UploadMedia(path string, encrypt bool) (*ifc.UploadedMediaIn
 	}, nil
 }
 
-func (c *Container) sendTypingAsync(roomID id.RoomID, typing bool, timeout int64) {
+func (c *Container) sendTypingAsync(roomID id.RoomID, typing bool, timeout time.Duration) {
 	defer debug.Recover()
 	_, _ = c.client.UserTyping(roomID, typing, timeout)
 }
@@ -1154,7 +1164,7 @@ func (c *Container) GetHistory(room *rooms.Room, limit int, dbPointer uint64) ([
 				origContent, _ := evt.Content.Parsed.(*event.EncryptedEventContent)
 				evt.Content.Parsed = muksevt.EncryptionUnsupportedContent{Original: origContent}
 			} else {
-				decrypted, err := c.crypto.DecryptMegolmEvent(evt)
+				decrypted, err := c.crypto.DecryptMegolmEvent(context.Background(), evt)
 				if err != nil {
 					debug.Printf("Failed to decrypt event %s: %v", evt.ID, err)
 					evt.Type = muksevt.EventBadEncrypted

@@ -29,6 +29,7 @@ import (
 
 	"maunium.net/go/mautrix/crypto"
 	"maunium.net/go/mautrix/event"
+	"maunium.net/go/mautrix/id"
 
 	"maunium.net/go/gomuks/config"
 	"maunium.net/go/gomuks/debug"
@@ -67,7 +68,7 @@ func (e *EmojiView) Draw(screen mauview.Screen) {
 type VerificationModal struct {
 	mauview.Component
 
-	device *crypto.DeviceIdentity
+	device *id.Device
 
 	container *mauview.Box
 
@@ -85,7 +86,7 @@ type VerificationModal struct {
 	parent *MainView
 }
 
-func NewVerificationModal(mainView *MainView, device *crypto.DeviceIdentity, timeout time.Duration) *VerificationModal {
+func NewVerificationModal(mainView *MainView, device *id.Device, timeout time.Duration) *VerificationModal {
 	vm := &VerificationModal{
 		parent:      mainView,
 		device:      device,
@@ -150,7 +151,7 @@ func (vm *VerificationModal) VerificationMethods() []crypto.VerificationMethod {
 	return []crypto.VerificationMethod{crypto.VerificationMethodEmoji{}, crypto.VerificationMethodDecimal{}}
 }
 
-func (vm *VerificationModal) VerifySASMatch(device *crypto.DeviceIdentity, data crypto.SASData) bool {
+func (vm *VerificationModal) VerifySASMatch(device *id.Device, data crypto.SASData) bool {
 	vm.device = device
 	var typeName string
 	if data.Type() == event.SASDecimal {

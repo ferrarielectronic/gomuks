@@ -50,10 +50,10 @@ func ParseEvent(matrix ifc.MatrixContainer, mainView ifc.MainView, room *rooms.R
 	if msg == nil {
 		return nil
 	}
-	if content, ok := evt.Content.Parsed.(*event.MessageEventContent); ok && len(content.GetReplyTo()) > 0 {
-		if replyToMsg := getCachedEvent(mainView, room.ID, content.GetReplyTo()); replyToMsg != nil {
+	if content, ok := evt.Content.Parsed.(*event.MessageEventContent); ok && len(content.RelatesTo.GetReplyTo()) > 0 {
+		if replyToMsg := getCachedEvent(mainView, room.ID, content.RelatesTo.GetReplyTo()); replyToMsg != nil {
 			msg.ReplyTo = replyToMsg.Clone()
-		} else if replyToEvt, _ := matrix.GetEvent(room, content.GetReplyTo()); replyToEvt != nil {
+		} else if replyToEvt, _ := matrix.GetEvent(room, content.RelatesTo.GetReplyTo()); replyToEvt != nil {
 			if replyToMsg = directParseEvent(matrix, room, replyToEvt); replyToMsg != nil {
 				msg.ReplyTo = replyToMsg
 				msg.ReplyTo.Reactions = nil
@@ -193,7 +193,7 @@ func ParseStateEvent(evt *muksevt.Event, displayname string) *UIMessage {
 
 func ParseMessage(matrix ifc.MatrixContainer, room *rooms.Room, evt *muksevt.Event, displayname string) *UIMessage {
 	content := evt.Content.AsMessage()
-	if len(content.GetReplyTo()) > 0 {
+	if len(content.RelatesTo.GetReplyTo()) > 0 {
 		content.RemoveReplyFallback()
 	}
 	if len(evt.Gomuks.Edits) > 0 {

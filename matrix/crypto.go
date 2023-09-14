@@ -77,10 +77,6 @@ func isBadEncryptError(err error) bool {
 	return err != crypto.SessionExpired && err != crypto.SessionNotShared && err != crypto.NoGroupSession
 }
 
-func memoryStoreSaveCallback() error {
-	return nil
-}
-
 func (c *Container) initCrypto() error {
 	var cryptoStore crypto.Store
 	var err error

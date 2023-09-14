@@ -86,18 +86,18 @@ func (hm *HistoryManager) Close() error {
 }
 
 var (
-	EventNotFoundError = errors.New("event not found")
-	RoomNotFoundError  = errors.New("room not found")
+	ErrEventNotFound = errors.New("event not found")
+	ErrRoomNotFound  = errors.New("room not found")
 )
 
 func (hm *HistoryManager) getStreamIndex(tx *bolt.Tx, roomID []byte, eventID []byte) (*bolt.Bucket, []byte, error) {
 	eventIDs := tx.Bucket(bucketRoomEventIDs).Bucket(roomID)
 	if eventIDs == nil {
-		return nil, nil, RoomNotFoundError
+		return nil, nil, ErrRoomNotFound
 	}
 	index := eventIDs.Get(eventID)
 	if index == nil {
-		return nil, nil, EventNotFoundError
+		return nil, nil, ErrEventNotFound
 	}
 	stream := tx.Bucket(bucketRoomStreams).Bucket(roomID)
 	return stream, index, nil
@@ -105,8 +105,8 @@ func (hm *HistoryManager) getStreamIndex(tx *bolt.Tx, roomID []byte, eventID []b
 
 func (hm *HistoryManager) getEvent(tx *bolt.Tx, stream *bolt.Bucket, index []byte) (*muksevt.Event, error) {
 	eventData := stream.Get(index)
-	if eventData == nil || len(eventData) == 0 {
-		return nil, EventNotFoundError
+	if len(eventData) == 0 {
+		return nil, ErrEventNotFound
 	}
 	return unmarshalEvent(eventData)
 }

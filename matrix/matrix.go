@@ -83,12 +83,6 @@ func (c *Container) Client() *mautrix.Client {
 	return c.client
 }
 
-type mxLogger struct{}
-
-func (log mxLogger) Debugfln(message string, args ...interface{}) {
-	debug.Printf("[Matrix] "+message, args...)
-}
-
 func (c *Container) Crypto() ifc.Crypto {
 	return c.crypto
 }
@@ -130,7 +124,7 @@ func (c *Container) InitClient(isStartup bool) error {
 	}
 	c.client.UserAgent = fmt.Sprintf("gomuks/%s %s", c.gmx.Version(), mautrix.DefaultUserAgent)
 	log := zerolog.New(zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
-		w.Out = os.Stdout
+		w.Out, _ = os.Create(path.Join(debug.LogDirectory, "gomuks.log"))
 		w.TimeFormat = time.Stamp
 	})).With().Timestamp().Logger()
 	log = log.Level(zerolog.InfoLevel)
@@ -594,7 +588,7 @@ func (c *Container) HandleReaction(room *rooms.Room, reactsTo id.EventID, reactE
 		if evt.Unsigned.Relations.Annotations.Map == nil {
 			evt.Unsigned.Relations.Annotations.Map = make(map[string]int)
 		}
-		val, _ := evt.Unsigned.Relations.Annotations.Map[rel.Key]
+		val := evt.Unsigned.Relations.Annotations.Map[rel.Key]
 		evt.Unsigned.Relations.Annotations.Map[rel.Key] = val + 1
 		origEvt = evt
 		return nil
@@ -1197,7 +1191,7 @@ func (c *Container) GetHistory(room *rooms.Room, limit int, dbPointer uint64) ([
 
 func (c *Container) GetEvent(room *rooms.Room, eventID id.EventID) (*muksevt.Event, error) {
 	evt, err := c.history.Get(room, eventID)
-	if err != nil && err != EventNotFoundError {
+	if err != nil && err != ErrEventNotFound {
 		debug.Printf("Failed to get event %s from local cache: %v", eventID, err)
 	} else if evt != nil {
 		debug.Printf("Found event %s in local cache", eventID)

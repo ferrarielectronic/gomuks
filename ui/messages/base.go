@@ -102,15 +102,20 @@ func newUIMessage(evt *muksevt.Event, displayname string, renderer MessageRender
 	if len(msgtype) == 0 {
 		msgtype = event.MessageType(evt.Type.String())
 	}
-
-	reactions := make(ReactionSlice, 0, len(evt.Unsigned.Relations.Annotations.Map))
-	for key, count := range evt.Unsigned.Relations.Annotations.Map {
-		reactions = append(reactions, ReactionItem{
-			Key:   key,
-			Count: count,
-		})
+	length := 0
+	if evt.Unsigned.Relations != nil {
+		length = len(evt.Unsigned.Relations.Annotations.Map)
 	}
-	sort.Sort(reactions)
+	reactions := make(ReactionSlice, 0, length)
+	if length > 0 {
+		for key, count := range evt.Unsigned.Relations.Annotations.Map {
+			reactions = append(reactions, ReactionItem{
+				Key:   key,
+				Count: count,
+			})
+		}
+		sort.Sort(reactions)
+	}
 
 	return &UIMessage{
 		SenderID:           evt.Sender,
